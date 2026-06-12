@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Truck Parts Inventory</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#20303f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Truck Parts">
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --card: #ffffff;
+    --ink: #1c2430;
+    --muted: #67707e;
+    --line: #dde1e7;
+    --accent: #1d6fd1;
+    --accent-dark: #155cb0;
+    --danger: #c43d3d;
+    --warn-bg: #fdf3e0;
+    --warn-edge: #e8a23d;
+    --good: #2e8b57;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    font-size: 15px;
+  }
+  header {
+    background: #20303f;
+    color: #fff;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  header h1 { font-size: 18px; margin: 0; letter-spacing: .3px; }
+  header .sub { font-size: 12px; color: #aebccb; }
+  #dirtyDot { color: #f5b942; margin-left: 5px; font-size: 14px; }
+  #dirtyDot[hidden] { display: none; }
+
+  nav.tabs {
+    display: flex;
+    background: var(--card);
+    border-bottom: 1px solid var(--line);
+    position: sticky;
+    top: 0;
+    z-index: 5;
+  }
+  nav.tabs button {
+    flex: 1;
+    border: none;
+    background: none;
+    padding: 12px 8px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--muted);
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+  }
+  nav.tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
+  nav.tabs button .badge[hidden] { display: none; }
+  nav.tabs button .badge {
+    display: inline-block;
+    background: var(--danger);
+    color: #fff;
+    border-radius: 10px;
+    font-size: 11px;
+    padding: 1px 7px;
+    margin-left: 5px;
+    vertical-align: 1px;
+  }
+
+  main { max-width: 1000px; margin: 0 auto; padding: 14px; }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .stat {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+  }
+  .stat .label { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
+  .stat .value { font-size: 19px; font-weight: 700; margin-top: 2px; }
+  .stat .value.low { color: var(--danger); }
+
+  .toolbar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .toolbar input[type="search"] {
+    flex: 1;
+    min-width: 160px;
+    padding: 9px 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    font-size: 15px;
+    background: var(--card);
+  }
+  button.btn {
+    border: 1px solid var(--line);
+    background: var(--card);
+    color: var(--ink);
+    padding: 9px 14px;
+    border-radius: var(--radius);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  button.btn:hover { background: #eef1f5; }
+  button.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.btn.primary:hover { background: var(--accent-dark); }
+  button.btn.danger { color: var(--danger); border-color: #e3c2c2; }
+  button.btn.small { padding: 5px 10px; font-size: 13px; }
+
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td.desc, th.desc { white-space: normal; min-width: 160px; }
+  th {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: var(--muted);
+    background: #fafbfc;
+    position: sticky;
+    top: 0;
+  }
+  td.num, th.num { text-align: right; }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover { background: #f2f6fc; }
+  tr.low td { background: var(--warn-bg); }
+  tr.low td:first-child { box-shadow: inset 3px 0 0 var(--warn-edge); }
+  .pn { font-weight: 700; }
+  .qty-btns { display: inline-flex; gap: 6px; }
+  .qty-btns button {
+    width: 30px; height: 30px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: #fff;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    line-height: 1;
+  }
+  .qty-btns button:hover { background: #eef1f5; }
+  .tag {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 9px;
+  }
+  .tag.low { background: #f8e3c5; color: #8a5a13; }
+  .tag.pinned { background: #dbe9fb; color: var(--accent-dark); }
+  .tag.recv { background: #d9efe2; color: #1e6b43; }
+  .tag.used { background: #f6dede; color: #993939; }
+  .tag.adj  { background: #e8e3f7; color: #5b4a9e; }
+  .tag.new  { background: #dbe9fb; color: var(--accent-dark); }
+  .tag.edit { background: #e6e8eb; color: #4a5360; }
+
+  .empty { padding: 36px 16px; text-align: center; color: var(--muted); }
+  .hint { font-size: 12px; color: var(--muted); margin: 8px 2px; }
+
+  /* dialogs */
+  dialog {
+    border: none;
+    border-radius: 14px;
+    padding: 0;
+    width: min(440px, calc(100vw - 28px));
+    box-shadow: 0 18px 50px rgba(0,0,0,.25);
+  }
+  dialog::backdrop { background: rgba(15,23,32,.45); }
+  .dlg-head {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+  }
+  .dlg-head h2 { font-size: 16px; margin: 0; }
+  .dlg-body { padding: 16px 18px; max-height: 65vh; overflow-y: auto; }
+  .dlg-foot {
+    padding: 12px 18px;
+    border-top: 1px solid var(--line);
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .x-btn { border: none; background: none; font-size: 20px; cursor: pointer; color: var(--muted); padding: 4px; }
+  label.field { display: block; margin-bottom: 12px; font-size: 13px; font-weight: 600; color: var(--ink); }
+  label.field input, label.field textarea {
+    display: block;
+    width: 100%;
+    margin-top: 5px;
+    padding: 9px 11px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-size: 15px;
+    font-family: inherit;
+  }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+
+  /* part detail */
+  .detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 14px;
+    margin-bottom: 14px;
+    font-size: 14px;
+  }
+  .detail-grid .label { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
+  .detail-grid .val { font-weight: 700; font-size: 16px; }
+  .action-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+  .hist-list { margin-top: 6px; }
+  .hist-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 2px;
+    border-bottom: 1px solid var(--line);
+    font-size: 13px;
+  }
+  .hist-item:last-child { border-bottom: none; }
+  .hist-item .when { color: var(--muted); font-size: 12px; }
+  .hist-item .note { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .hist-item .delta { font-weight: 700; white-space: nowrap; }
+  .delta.plus { color: var(--good); }
+  .delta.minus { color: var(--danger); }
+  h3.sect { font-size: 13px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin: 16px 0 4px; }
+
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 18px 12px 28px; }
+  footer button { background: none; border: none; color: var(--accent); cursor: pointer; font-size: 12px; text-decoration: underline; }
+
+  @media (max-width: 560px) {
+    main { padding: 10px; }
+    th, td { padding: 8px 7px; }
+    .hide-sm { display: none; }
+  }
+  @media print {
+    header, nav.tabs, .toolbar, .stats, footer, .no-print { display: none !important; }
+    body { background: #fff; }
+    .panel { border: none; }
+    main { max-width: none; padding: 0; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>🚚 Truck Parts Inventory</h1>
+    <div class="sub">Saved on this device — tap Sync to hand off between iPhone &amp; iPad</div>
+  </div>
+  <button class="btn small" id="btnBackup" style="background:#2c3e50;border-color:#3d5166;color:#dce5ee;">Sync<span id="dirtyDot" hidden>&#9679;</span></button>
+</header>
+
+<nav class="tabs">
+  <button data-tab="inventory" class="active">Inventory</button>
+  <button data-tab="shortlist">Short List<span class="badge" id="shortBadge" hidden></span></button>
+  <button data-tab="history">History</button>
+</nav>
+
+<main>
+  <!-- INVENTORY -->
+  <section id="view-inventory">
+    <div class="stats" id="stats"></div>
+    <div class="toolbar">
+      <input type="search" id="search" placeholder="Search part # or description…">
+      <button class="btn primary" id="btnAdd">+ Add Part</button>
+    </div>
+    <div class="panel table-wrap" id="invTable"></div>
+    <p class="hint">Tap a part for details, stock moves, and its history. Yellow rows are at or below their reorder point. Use +/− for quick receive/use of 1.</p>
+  </section>
+
+  <!-- SHORT LIST -->
+  <section id="view-shortlist" hidden>
+    <div class="toolbar no-print">
+      <button class="btn" id="btnCopyList">Copy List</button>
+      <button class="btn" id="btnPrintList">Print</button>
+    </div>
+    <div class="panel table-wrap" id="shortTable"></div>
+    <p class="hint">Parts at or below their reorder point appear here automatically. You can also pin any part to the short list from its detail screen.</p>
+  </section>
+
+  <!-- HISTORY -->
+  <section id="view-history" hidden>
+    <div class="toolbar">
+      <input type="search" id="histSearch" placeholder="Filter history by part # or description…">
+    </div>
+    <div class="panel table-wrap" id="histTable"></div>
+  </section>
+</main>
+
+<footer>
+  Truck Parts Inventory &middot; <span id="countNote"></span>
+</footer>
+
+<!-- Add / Edit part -->
+<dialog id="dlgPart">
+  <form method="dialog" id="formPart">
+    <div class="dlg-head"><h2 id="dlgPartTitle">Add Part</h2><button type="button" class="x-btn" data-close>&times;</button></div>
+    <div class="dlg-body">
+      <label class="field">Part Number
+        <input name="pn" required autocomplete="off" placeholder="e.g. WB-4521">
+      </label>
+      <label class="field">Description
+        <input name="desc" required autocomplete="off" placeholder="e.g. Water heater element 4500W">
+      </label>
+      <div class="two-col">
+        <label class="field">Cost ($)
+          <input name="cost" type="number" step="0.01" min="0" required inputmode="decimal">
+        </label>
+        <label class="field">Retail ($)
+          <input name="retail" type="number" step="0.01" min="0" required inputmode="decimal">
+        </label>
+      </div>
+      <div class="two-col">
+        <label class="field">Qty on Hand
+          <input name="qoh" type="number" step="1" min="0" required inputmode="numeric">
+        </label>
+        <label class="field">Reorder Point
+          <input name="reorder" type="number" step="1" min="0" required inputmode="numeric">
+        </label>
+      </div>
+    </div>
+    <div class="dlg-foot">
+      <button type="button" class="btn" data-close>Cancel</button>
+      <button type="submit" class="btn primary" id="btnSavePart">Save Part</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Part detail -->
+<dialog id="dlgDetail">
+  <div class="dlg-head"><h2 id="detailTitle"></h2><button type="button" class="x-btn" data-close>&times;</button></div>
+  <div class="dlg-body" id="detailBody"></div>
+  <div class="dlg-foot">
+    <button type="button" class="btn danger" id="btnDelete">Delete</button>
+    <button type="button" class="btn" id="btnPin"></button>
+    <button type="button" class="btn" id="btnEdit">Edit</button>
+    <button type="button" class="btn" data-close>Close</button>
+  </div>
+</dialog>
+
+<!-- Stock move -->
+<dialog id="dlgStock">
+  <form method="dialog" id="formStock">
+    <div class="dlg-head"><h2 id="dlgStockTitle">Stock</h2><button type="button" class="x-btn" data-close>&times;</button></div>
+    <div class="dlg-body">
+      <label class="field" id="stockQtyLabel">Quantity
+        <input name="qty" type="number" step="1" min="0" required inputmode="numeric">
+      </label>
+      <label class="field">Note (optional)
+        <input name="note" autocomplete="off" placeholder="e.g. Job #1042, Smith residence">
+      </label>
+    </div>
+    <div class="dlg-foot">
+      <button type="button" class="btn" data-close>Cancel</button>
+      <button type="submit" class="btn primary">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Sync / backup -->
+<dialog id="dlgBackup">
+  <div class="dlg-head"><h2>Sync — iPhone &amp; iPad</h2><button type="button" class="x-btn" data-close>&times;</button></div>
+  <div class="dlg-body">
+    <p style="margin-top:0;font-size:14px;" id="syncStatus"></p>
+    <div class="action-row">
+      <button class="btn primary" id="btnExportJson">&#8679; Save to iCloud</button>
+      <button class="btn" id="btnImportJson">&#8681; Load from iCloud</button>
+    </div>
+    <p style="font-size:13px;color:var(--muted);line-height:1.55;">
+      <b>Done working on this device?</b> Tap <b>Save to iCloud</b>, then choose <b>Save to Files &rarr; iCloud Drive</b> and replace the old <b>truck-inventory.json</b>.<br><br>
+      <b>Picking up on the other device?</b> Tap <b>Load from iCloud</b> there and pick <b>truck-inventory.json</b>. The orange dot on the Sync button means you have changes that haven&rsquo;t been saved yet.
+    </p>
+    <h3 class="sect">Other</h3>
+    <div class="action-row">
+      <button class="btn small" id="btnExportCsv">Export CSV (for Excel)</button>
+    </div>
+    <input type="file" id="fileImport" accept=".json,application/json" hidden>
+  </div>
+  <div class="dlg-foot"><button type="button" class="btn" data-close>Close</button></div>
+</dialog>
+
+<script>
+(function () {
+  'use strict';
+
+  var STORE_KEY = 'truckPartsInventory_v1';
+  var state = load();
+  var currentTab = 'inventory';
+  var editingId = null;     // part being edited in form
+  var detailId = null;      // part open in detail dialog
+  var stockMode = null;     // 'receive' | 'use' | 'adjust'
+
+  // ---------- persistence ----------
+  function load() {
+    try {
+      var raw = localStorage.getItem(STORE_KEY);
+      if (raw) {
+        var data = JSON.parse(raw);
+        if (data && Array.isArray(data.parts) && Array.isArray(data.history)) return data;
+      }
+    } catch (e) { /* fall through to fresh state */ }
+    return { parts: [], history: [] };
+  }
+  function save() {
+    localStorage.setItem(STORE_KEY, JSON.stringify(state));
+  }
+  function uid() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  }
+
+  // ---------- helpers ----------
+  function $(sel) { return document.querySelector(sel); }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function money(n) {
+    return '$' + (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function when(ts) {
+    var d = new Date(ts);
+    return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  }
+  function getPart(id) {
+    for (var i = 0; i < state.parts.length; i++) if (state.parts[i].id === id) return state.parts[i];
+    return null;
+  }
+  function isLow(p) { return p.qoh <= p.reorder; }
+  function suggestedOrder(p) {
+    return Math.max((p.reorder * 2) - p.qoh, 1);
+  }
+  function typeTag(t) {
+    var map = { Received: 'recv', Used: 'used', Adjusted: 'adj', Created: 'new', Edited: 'edit' };
+    return '<span class="tag ' + (map[t] || 'edit') + '">' + esc(t) + '</span>';
+  }
+  function markChanged() {
+    state.lastChange = Date.now();
+  }
+  function isDirty() {
+    return !!state.lastChange && (!state.lastSave || state.lastChange > state.lastSave);
+  }
+  function logHistory(part, type, change, note) {
+    markChanged();
+    state.history.unshift({
+      id: uid(),
+      partId: part.id,
+      pn: part.pn,
+      desc: part.desc,
+      ts: Date.now(),
+      type: type,
+      change: change,
+      qohAfter: part.qoh,
+      note: note || ''
+    });
+  }
+
+  // ---------- rendering ----------
+  function renderAll() {
+    save();
+    renderStats();
+    renderInventory();
+    renderShortlist();
+    renderHistory();
+    var lowCount = state.parts.filter(isLow).length + state.parts.filter(function (p) { return p.pinned && !isLow(p); }).length;
+    var badge = $('#shortBadge');
+    badge.hidden = lowCount === 0;
+    badge.textContent = lowCount;
+    $('#countNote').textContent = state.parts.length + ' part' + (state.parts.length === 1 ? '' : 's') + ' tracked';
+    $('#dirtyDot').hidden = !isDirty();
+    updateSyncStatus();
+  }
+
+  function updateSyncStatus() {
+    var el = $('#syncStatus');
+    if (!state.lastSave) {
+      el.innerHTML = isDirty()
+        ? '<b style="color:#b07514;">&#9679; Not saved to iCloud yet.</b> Tap Save below to create your sync file.'
+        : 'No sync file yet. Tap <b>Save to iCloud</b> after you add your parts.';
+    } else if (isDirty()) {
+      el.innerHTML = '<b style="color:#b07514;">&#9679; Unsaved changes</b> on this device. Last saved ' + when(state.lastSave) + '.';
+    } else {
+      el.innerHTML = '<b style="color:var(--good);">&#10003; All changes saved.</b> Last saved ' + when(state.lastSave) + '.';
+    }
+  }
+
+  function renderStats() {
+    var costVal = 0, retailVal = 0, low = 0;
+    state.parts.forEach(function (p) {
+      costVal += p.cost * p.qoh;
+      retailVal += p.retail * p.qoh;
+      if (isLow(p)) low++;
+    });
+    $('#stats').innerHTML =
+      stat('Parts', state.parts.length) +
+      stat('Value (Cost)', money(costVal)) +
+      stat('Value (Retail)', money(retailVal)) +
+      stat('Need Reorder', low, low > 0);
+    function stat(label, value, danger) {
+      return '<div class="stat"><div class="label">' + label + '</div><div class="value' + (danger ? ' low' : '') + '">' + value + '</div></div>';
+    }
+  }
+
+  function filteredParts() {
+    var q = $('#search').value.trim().toLowerCase();
+    var parts = state.parts.slice().sort(function (a, b) { return a.pn.localeCompare(b.pn, undefined, { numeric: true }); });
+    if (!q) return parts;
+    return parts.filter(function (p) {
+      return p.pn.toLowerCase().indexOf(q) !== -1 || p.desc.toLowerCase().indexOf(q) !== -1;
+    });
+  }
+
+  function renderInventory() {
+    var parts = filteredParts();
+    if (!state.parts.length) {
+      $('#invTable').innerHTML = '<div class="empty">No parts yet.<br><br>Tap <b>+ Add Part</b> to set up your first one.</div>';
+      return;
+    }
+    if (!parts.length) {
+      $('#invTable').innerHTML = '<div class="empty">No parts match your search.</div>';
+      return;
+    }
+    var rows = parts.map(function (p) {
+      return '<tr class="' + (isLow(p) ? 'low' : '') + '" data-id="' + p.id + '">' +
+        '<td class="pn">' + esc(p.pn) + (p.pinned ? ' <span class="tag pinned">PIN</span>' : '') + '</td>' +
+        '<td class="desc">' + esc(p.desc) + '</td>' +
+        '<td class="num hide-sm">' + money(p.cost) + '</td>' +
+        '<td class="num hide-sm">' + money(p.retail) + '</td>' +
+        '<td class="num"><b>' + p.qoh + '</b>' + (isLow(p) ? ' <span class="tag low">LOW</span>' : '') + '</td>' +
+        '<td class="num hide-sm">' + p.reorder + '</td>' +
+        '<td class="num no-print"><span class="qty-btns">' +
+          '<button data-quick="use" data-id="' + p.id + '" title="Use 1">&minus;</button>' +
+          '<button data-quick="receive" data-id="' + p.id + '" title="Receive 1">+</button>' +
+        '</span></td>' +
+      '</tr>';
+    }).join('');
+    $('#invTable').innerHTML =
+      '<table><thead><tr>' +
+      '<th>Part #</th><th class="desc">Description</th><th class="num hide-sm">Cost</th><th class="num hide-sm">Retail</th>' +
+      '<th class="num">QOH</th><th class="num hide-sm">Reorder</th><th class="num no-print"></th>' +
+      '</tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  function shortlistParts() {
+    return state.parts
+      .filter(function (p) { return isLow(p) || p.pinned; })
+      .sort(function (a, b) { return a.pn.localeCompare(b.pn, undefined, { numeric: true }); });
+  }
+
+  function renderShortlist() {
+    var parts = shortlistParts();
+    if (!parts.length) {
+      $('#shortTable').innerHTML = '<div class="empty">Nothing on the short list — all parts are above their reorder points. 👍</div>';
+      return;
+    }
+    var rows = parts.map(function (p) {
+      return '<tr data-id="' + p.id + '">' +
+        '<td class="pn">' + esc(p.pn) + '</td>' +
+        '<td class="desc">' + esc(p.desc) + '</td>' +
+        '<td class="num">' + p.qoh + '</td>' +
+        '<td class="num">' + p.reorder + '</td>' +
+        '<td class="num"><b>' + suggestedOrder(p) + '</b></td>' +
+        '<td>' + (p.pinned && !isLow(p) ? '<span class="tag pinned">PINNED</span>' : '<span class="tag low">LOW</span>') + '</td>' +
+      '</tr>';
+    }).join('');
+    $('#shortTable').innerHTML =
+      '<table><thead><tr>' +
+      '<th>Part #</th><th class="desc">Description</th><th class="num">QOH</th><th class="num">Reorder Pt</th><th class="num">Suggested</th><th></th>' +
+      '</tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  function renderHistory() {
+    var q = $('#histSearch').value.trim().toLowerCase();
+    var items = state.history;
+    if (q) {
+      items = items.filter(function (h) {
+        return h.pn.toLowerCase().indexOf(q) !== -1 || h.desc.toLowerCase().indexOf(q) !== -1 || (h.note || '').toLowerCase().indexOf(q) !== -1;
+      });
+    }
+    if (!items.length) {
+      $('#histTable').innerHTML = '<div class="empty">' + (state.history.length ? 'No history matches your filter.' : 'No activity yet. Stock moves and edits will show up here.') + '</div>';
+      return;
+    }
+    var rows = items.slice(0, 300).map(function (h) {
+      var delta = h.change === 0 || h.change == null ? '—' :
+        '<span class="delta ' + (h.change > 0 ? 'plus' : 'minus') + '">' + (h.change > 0 ? '+' : '') + h.change + '</span>';
+      return '<tr data-id="' + (h.partId || '') + '">' +
+        '<td>' + when(h.ts) + '</td>' +
+        '<td class="pn">' + esc(h.pn) + '</td>' +
+        '<td>' + typeTag(h.type) + '</td>' +
+        '<td class="num">' + delta + '</td>' +
+        '<td class="num">' + (h.qohAfter != null ? h.qohAfter : '—') + '</td>' +
+        '<td class="desc">' + esc(h.note || '') + '</td>' +
+      '</tr>';
+    }).join('');
+    $('#histTable').innerHTML =
+      '<table><thead><tr>' +
+      '<th>When</th><th>Part #</th><th>Action</th><th class="num">Qty</th><th class="num">QOH After</th><th class="desc">Note</th>' +
+      '</tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  // ---------- part detail ----------
+  function openDetail(id) {
+    var p = getPart(id);
+    if (!p) return;
+    detailId = id;
+    $('#detailTitle').textContent = p.pn;
+    var hist = state.history.filter(function (h) { return h.partId === id; });
+    var margin = p.retail - p.cost;
+    var histHtml = hist.length ? hist.slice(0, 100).map(function (h) {
+      var delta = h.change === 0 || h.change == null ? '' :
+        '<span class="delta ' + (h.change > 0 ? 'plus' : 'minus') + '">' + (h.change > 0 ? '+' : '') + h.change + ' &rarr; ' + h.qohAfter + '</span>';
+      return '<div class="hist-item"><div>' +
+        typeTag(h.type) + ' <span class="when">' + when(h.ts) + '</span>' +
+        (h.note ? '<div class="note">' + esc(h.note) + '</div>' : '') +
+        '</div><div class="delta">' + delta + '</div></div>';
+    }).join('') : '<div class="hint">No history yet for this part.</div>';
+
+    $('#detailBody').innerHTML =
+      '<div style="margin-bottom:12px;font-size:15px;">' + esc(p.desc) + '</div>' +
+      '<div class="detail-grid">' +
+        dg('Qty on Hand', p.qoh + (isLow(p) ? ' <span class="tag low">LOW</span>' : '')) +
+        dg('Reorder Point', p.reorder) +
+        dg('Cost', money(p.cost)) +
+        dg('Retail', money(p.retail)) +
+        dg('Margin / Unit', money(margin)) +
+        dg('Value on Truck', money(p.cost * p.qoh)) +
+      '</div>' +
+      '<div class="action-row">' +
+        '<button class="btn primary small" data-stock="receive">+ Receive</button>' +
+        '<button class="btn small" data-stock="use">&minus; Use / Sell</button>' +
+        '<button class="btn small" data-stock="adjust">Adjust Count</button>' +
+      '</div>' +
+      '<h3 class="sect">History</h3>' +
+      '<div class="hist-list">' + histHtml + '</div>';
+
+    $('#btnPin').textContent = p.pinned ? 'Unpin from Short List' : 'Pin to Short List';
+    $('#dlgDetail').showModal();
+
+    function dg(label, val) {
+      return '<div><div class="label">' + label + '</div><div class="val">' + val + '</div></div>';
+    }
+  }
+
+  // ---------- stock moves ----------
+  function openStock(mode) {
+    var p = getPart(detailId);
+    if (!p) return;
+    stockMode = mode;
+    var form = $('#formStock');
+    form.reset();
+    var titles = { receive: 'Receive Stock', use: 'Use / Sell', adjust: 'Adjust Count' };
+    $('#dlgStockTitle').textContent = titles[mode] + ' — ' + p.pn;
+    $('#stockQtyLabel').firstChild.textContent = mode === 'adjust' ? 'New Quantity on Hand' : 'Quantity';
+    form.qty.value = mode === 'adjust' ? p.qoh : 1;
+    if (mode === 'use') form.qty.max = p.qoh; else form.qty.removeAttribute('max');
+    form.qty.min = mode === 'adjust' ? 0 : 1;
+    $('#dlgStock').showModal();
+    setTimeout(function () { form.qty.select(); }, 50);
+  }
+
+  function applyStock(qty, note) {
+    var p = getPart(detailId);
+    if (!p) return;
+    if (stockMode === 'receive') {
+      p.qoh += qty;
+      logHistory(p, 'Received', qty, note);
+    } else if (stockMode === 'use') {
+      qty = Math.min(qty, p.qoh);
+      if (qty <= 0) return;
+      p.qoh -= qty;
+      logHistory(p, 'Used', -qty, note);
+    } else if (stockMode === 'adjust') {
+      var diff = qty - p.qoh;
+      p.qoh = qty;
+      logHistory(p, 'Adjusted', diff, note || 'Count corrected');
+    }
+    renderAll();
+    openDetail(p.id); // refresh detail view
+  }
+
+  function quickMove(id, mode) {
+    var p = getPart(id);
+    if (!p) return;
+    if (mode === 'receive') {
+      p.qoh += 1;
+      logHistory(p, 'Received', 1, 'Quick +1');
+    } else {
+      if (p.qoh <= 0) return;
+      p.qoh -= 1;
+      logHistory(p, 'Used', -1, 'Quick −1');
+    }
+    renderAll();
+  }
+
+  // ---------- add / edit ----------
+  function openPartForm(id) {
+    editingId = id || null;
+    var form = $('#formPart');
+    form.reset();
+    $('#dlgPartTitle').textContent = id ? 'Edit Part' : 'Add Part';
+    $('#btnSavePart').textContent = id ? 'Save Changes' : 'Add Part';
+    if (id) {
+      var p = getPart(id);
+      form.pn.value = p.pn;
+      form.desc.value = p.desc;
+      form.cost.value = p.cost;
+      form.retail.value = p.retail;
+      form.qoh.value = p.qoh;
+      form.reorder.value = p.reorder;
+    }
+    $('#dlgPart').showModal();
+    setTimeout(function () { form.pn.focus(); }, 50);
+  }
+
+  function submitPartForm() {
+    var form = $('#formPart');
+    var pn = form.pn.value.trim();
+    var desc = form.desc.value.trim();
+    var cost = parseFloat(form.cost.value) || 0;
+    var retail = parseFloat(form.retail.value) || 0;
+    var qoh = Math.max(0, parseInt(form.qoh.value, 10) || 0);
+    var reorder = Math.max(0, parseInt(form.reorder.value, 10) || 0);
+    if (!pn || !desc) return;
+
+    var dup = state.parts.find(function (p) {
+      return p.pn.toLowerCase() === pn.toLowerCase() && p.id !== editingId;
+    });
+    if (dup && !confirm('Part number "' + pn + '" already exists. Save anyway?')) return;
+
+    if (editingId) {
+      var p = getPart(editingId);
+      var qtyDiff = qoh - p.qoh;
+      p.pn = pn; p.desc = desc; p.cost = cost; p.retail = retail; p.reorder = reorder;
+      if (qtyDiff !== 0) {
+        p.qoh = qoh;
+        logHistory(p, 'Adjusted', qtyDiff, 'Changed while editing part');
+      }
+      logHistory(p, 'Edited', null, 'Part details updated');
+    } else {
+      var np = { id: uid(), pn: pn, desc: desc, cost: cost, retail: retail, qoh: qoh, reorder: reorder, pinned: false };
+      state.parts.push(np);
+      logHistory(np, 'Created', qoh, 'Part added with starting qty ' + qoh);
+    }
+    renderAll();
+    if (detailId && editingId === detailId) openDetail(detailId);
+  }
+
+  // ---------- export / import ----------
+  function download(filename, text, type) {
+    var blob = new Blob([text], { type: type || 'text/plain' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+  function today() {
+    return new Date().toISOString().slice(0, 10);
+  }
+  function saveToCloud() {
+    state.lastSave = Date.now();
+    save();
+    var json = JSON.stringify(state, null, 2);
+    var file = null;
+    try { file = new File([json], 'truck-inventory.json', { type: 'application/json' }); } catch (e) { /* older browser */ }
+    if (file && navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+      // iPhone/iPad: opens the share sheet -> "Save to Files" -> iCloud Drive
+      navigator.share({ files: [file], title: 'Truck Inventory' }).catch(function () {});
+    } else {
+      download('truck-inventory.json', json, 'application/json');
+    }
+    renderAll();
+  }
+  function exportCsv() {
+    var head = 'Part Number,Description,Cost,Retail,QOH,Reorder Point\n';
+    var body = state.parts.map(function (p) {
+      return [p.pn, p.desc, p.cost, p.retail, p.qoh, p.reorder].map(csvCell).join(',');
+    }).join('\n');
+    download('truck-inventory-' + today() + '.csv', head + body, 'text/csv');
+    function csvCell(v) {
+      v = String(v == null ? '' : v);
+      return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+    }
+  }
+  function importJson(file) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      try {
+        var data = JSON.parse(reader.result);
+        if (!data || !Array.isArray(data.parts) || !Array.isArray(data.history)) throw new Error('bad format');
+        var fileIsOlder = state.parts.length > 0 && (data.lastSave || 0) < (state.lastChange || 0);
+        var msg = fileIsOlder
+          ? '⚠️ Heads up: this file looks OLDER than the data already on this device. Loading it will throw away your newer changes.\n\nLoad it anyway?'
+          : 'Replace what’s on this device (' + state.parts.length + ' parts) with this file (' + data.parts.length + ' parts)?';
+        if (!confirm(msg)) return;
+        state = data;
+        // freshly loaded = in sync
+        if (state.lastChange && (!state.lastSave || state.lastChange > state.lastSave)) state.lastSave = state.lastChange;
+        renderAll();
+        $('#dlgBackup').close();
+      } catch (e) {
+        alert('That file doesn’t look like a valid backup.');
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  // ---------- shortlist copy / print ----------
+  function copyShortlist() {
+    var parts = shortlistParts();
+    if (!parts.length) { alert('Short list is empty.'); return; }
+    var text = 'PARTS TO ORDER — ' + new Date().toLocaleDateString() + '\n' +
+      parts.map(function (p) {
+        return '• ' + p.pn + '  (' + p.desc + ')  — on hand: ' + p.qoh + ', order: ' + suggestedOrder(p);
+      }).join('\n');
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () {
+        var b = $('#btnCopyList');
+        b.textContent = 'Copied ✓';
+        setTimeout(function () { b.textContent = 'Copy List'; }, 1500);
+      }, function () { prompt('Copy this list:', text); });
+    } else {
+      prompt('Copy this list:', text);
+    }
+  }
+
+  // ---------- tabs ----------
+  function showTab(name) {
+    currentTab = name;
+    document.querySelectorAll('nav.tabs button').forEach(function (b) {
+      b.classList.toggle('active', b.dataset.tab === name);
+    });
+    $('#view-inventory').hidden = name !== 'inventory';
+    $('#view-shortlist').hidden = name !== 'shortlist';
+    $('#view-history').hidden = name !== 'history';
+  }
+
+  // ---------- events ----------
+  document.querySelectorAll('nav.tabs button').forEach(function (b) {
+    b.addEventListener('click', function () { showTab(b.dataset.tab); });
+  });
+
+  $('#search').addEventListener('input', renderInventory);
+  $('#histSearch').addEventListener('input', renderHistory);
+  $('#btnAdd').addEventListener('click', function () { openPartForm(null); });
+  $('#btnBackup').addEventListener('click', function () { $('#dlgBackup').showModal(); });
+  $('#btnExportJson').addEventListener('click', saveToCloud);
+  $('#btnExportCsv').addEventListener('click', exportCsv);
+  $('#btnImportJson').addEventListener('click', function () { $('#fileImport').click(); });
+  $('#fileImport').addEventListener('change', function (e) {
+    if (e.target.files[0]) importJson(e.target.files[0]);
+    e.target.value = '';
+  });
+  $('#btnCopyList').addEventListener('click', copyShortlist);
+  $('#btnPrintList').addEventListener('click', function () { window.print(); });
+
+  // inventory table: quick +/- and row click
+  $('#invTable').addEventListener('click', function (e) {
+    var quick = e.target.closest('button[data-quick]');
+    if (quick) {
+      quickMove(quick.dataset.id, quick.dataset.quick);
+      e.stopPropagation();
+      return;
+    }
+    var row = e.target.closest('tr[data-id]');
+    if (row) openDetail(row.dataset.id);
+  });
+  $('#shortTable').addEventListener('click', function (e) {
+    var row = e.target.closest('tr[data-id]');
+    if (row) openDetail(row.dataset.id);
+  });
+  $('#histTable').addEventListener('click', function (e) {
+    var row = e.target.closest('tr[data-id]');
+    if (row && row.dataset.id && getPart(row.dataset.id)) openDetail(row.dataset.id);
+  });
+
+  // part form
+  $('#formPart').addEventListener('submit', function (e) {
+    if (!$('#formPart').checkValidity()) return;
+    submitPartForm();
+  });
+
+  // detail dialog buttons
+  $('#detailBody').addEventListener('click', function (e) {
+    var btn = e.target.closest('button[data-stock]');
+    if (btn) openStock(btn.dataset.stock);
+  });
+  $('#btnEdit').addEventListener('click', function () {
+    $('#dlgDetail').close();
+    openPartForm(detailId);
+  });
+  $('#btnPin').addEventListener('click', function () {
+    var p = getPart(detailId);
+    if (!p) return;
+    p.pinned = !p.pinned;
+    markChanged();
+    renderAll();
+    openDetail(p.id);
+  });
+  $('#btnDelete').addEventListener('click', function () {
+    var p = getPart(detailId);
+    if (!p) return;
+    if (!confirm('Delete ' + p.pn + ' (' + p.desc + ')?\n\nIts history stays in the History tab.')) return;
+    state.parts = state.parts.filter(function (x) { return x.id !== detailId; });
+    markChanged();
+    $('#dlgDetail').close();
+    detailId = null;
+    renderAll();
+  });
+
+  // stock form
+  $('#formStock').addEventListener('submit', function () {
+    var form = $('#formStock');
+    if (!form.checkValidity()) return;
+    var qty = parseInt(form.qty.value, 10);
+    if (isNaN(qty)) return;
+    applyStock(qty, form.note.value.trim());
+  });
+
+  // generic close buttons
+  document.querySelectorAll('[data-close]').forEach(function (b) {
+    b.addEventListener('click', function () { b.closest('dialog').close(); });
+  });
+
+  renderAll();
+
+  // Offline support once the app is hosted (no effect when opened as a plain file)
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    navigator.serviceWorker.register('sw.js').catch(function () {});
+  }
+})();
+</script>
+</body>
+</html>
