@@ -275,7 +275,7 @@
 <header>
   <div>
     <h1>🚚 Truck Parts Inventory</h1>
-    <div class="sub">Saved on this device — tap Sync to hand off between iPhone &amp; iPad</div>
+    <div class="sub">Parts on your truck — iPhone &amp; iPad</div>
   </div>
   <button class="btn small" id="btnBackup" style="background:#2c3e50;border-color:#3d5166;color:#dce5ee;">Sync<span id="dirtyDot" hidden>&#9679;</span></button>
 </header>
@@ -291,7 +291,7 @@
   <section id="view-inventory">
     <div class="stats" id="stats"></div>
     <div class="toolbar">
-      <input type="search" id="search" placeholder="Search part # or description…">
+      <input type="search" id="search" placeholder="Search part #, alternate #, or description…">
       <button class="btn primary" id="btnAdd">+ Add Part</button>
     </div>
     <div class="panel table-wrap" id="invTable"></div>
@@ -331,6 +331,10 @@
       </label>
       <label class="field">Description
         <input name="desc" required autocomplete="off" placeholder="e.g. Water heater element 4500W">
+      </label>
+      <label class="field">Alternate / Cross-Reference Part #s <span style="font-weight:400;color:var(--muted);">(optional)</span>
+        <input name="alts" autocomplete="off" placeholder="e.g. WB4521, 279816, AP6010579">
+        <span class="hint" style="margin:4px 0 0;">Separate with commas. Searching any of these jumps to this part.</span>
       </label>
       <div class="two-col">
         <label class="field">Cost ($)
@@ -389,21 +393,41 @@
 
 <!-- Sync / backup -->
 <dialog id="dlgBackup">
-  <div class="dlg-head"><h2>Sync — iPhone &amp; iPad</h2><button type="button" class="x-btn" data-close>&times;</button></div>
+  <div class="dlg-head"><h2>Sync</h2><button type="button" class="x-btn" data-close>&times;</button></div>
   <div class="dlg-body">
-    <p style="margin-top:0;font-size:14px;" id="syncStatus"></p>
-    <div class="action-row">
-      <button class="btn primary" id="btnExportJson">&#8679; Save to iCloud</button>
-      <button class="btn" id="btnImportJson">&#8681; Load from iCloud</button>
+
+    <!-- AUTOMATIC CLOUD SYNC -->
+    <div id="cloudCard" style="border:1px solid var(--line);border-radius:10px;padding:12px 13px;margin-bottom:14px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+        <b style="font-size:15px;">Automatic Sync</b>
+        <span id="cloudPill" class="tag" style="background:#e6e8eb;color:#4a5360;">Off</span>
+      </div>
+      <p id="cloudStatus" style="font-size:13px;color:var(--muted);line-height:1.5;margin:8px 0 10px;"></p>
+      <div class="action-row" id="cloudButtons"></div>
+
+      <!-- setup form, hidden until "Set up" -->
+      <div id="cloudSetup" hidden style="margin-top:10px;border-top:1px solid var(--line);padding-top:10px;">
+        <p style="font-size:13px;line-height:1.5;margin:0 0 8px;">Paste the Firebase configuration from your project below, then tap Connect. (I'll walk you through getting this — it's a one-time step.)</p>
+        <textarea id="cloudCfgInput" rows="7" placeholder="apiKey: ...&#10;projectId: ..." style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font-size:13px;font-family:ui-monospace,Menlo,monospace;"></textarea>
+        <div class="action-row" style="margin-top:8px;">
+          <button class="btn primary small" id="btnCloudConnect">Connect</button>
+          <button class="btn small" id="btnCloudCancel">Cancel</button>
+        </div>
+        <p id="cloudErr" style="font-size:12px;color:var(--danger);margin:6px 2px 0;"></p>
+      </div>
     </div>
-    <p style="font-size:13px;color:var(--muted);line-height:1.55;">
-      <b>Done working on this device?</b> Tap <b>Save to iCloud</b>, then choose <b>Save to Files &rarr; iCloud Drive</b> and replace the old <b>truck-inventory.json</b>.<br><br>
-      <b>Picking up on the other device?</b> Tap <b>Load from iCloud</b> there and pick <b>truck-inventory.json</b>. The orange dot on the Sync button means you have changes that haven&rsquo;t been saved yet.
+
+    <!-- MANUAL BACKUP -->
+    <h3 class="sect">Manual backup (no internet needed)</h3>
+    <p style="margin-top:0;font-size:13px;color:var(--muted);" id="syncStatus"></p>
+    <div class="action-row">
+      <button class="btn small" id="btnExportJson">&#8679; Save to iCloud</button>
+      <button class="btn small" id="btnImportJson">&#8681; Load from iCloud</button>
+      <button class="btn small" id="btnExportCsv">Export CSV</button>
+    </div>
+    <p style="font-size:12px;color:var(--muted);line-height:1.5;margin-top:8px;">
+      Use these any time to keep a copy of your data, or to move it by hand: <b>Save to iCloud</b> &rarr; Save to Files &rarr; iCloud Drive on one device, then <b>Load from iCloud</b> on the other.
     </p>
-    <h3 class="sect">Other</h3>
-    <div class="action-row">
-      <button class="btn small" id="btnExportCsv">Export CSV (for Excel)</button>
-    </div>
     <input type="file" id="fileImport" accept=".json,application/json" hidden>
   </div>
   <div class="dlg-foot"><button type="button" class="btn" data-close>Close</button></div>
@@ -426,14 +450,20 @@
       var raw = localStorage.getItem(STORE_KEY);
       if (raw) {
         var data = JSON.parse(raw);
-        if (data && Array.isArray(data.parts) && Array.isArray(data.history)) return data;
+        if (data && Array.isArray(data.parts) && Array.isArray(data.history)) {
+          if (!data.deletedParts) data.deletedParts = {};
+          return data;
+        }
       }
     } catch (e) { /* fall through to fresh state */ }
-    return { parts: [], history: [] };
+    return { parts: [], history: [], deletedParts: {} };
   }
   function save() {
     localStorage.setItem(STORE_KEY, JSON.stringify(state));
+    cloud.schedulePush();
   }
+  // stamp a part as just-changed (drives last-writer-wins merge across devices)
+  function touch(p) { if (p) p.updatedAt = Date.now(); }
   function uid() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   }
@@ -472,6 +502,7 @@
   }
   function logHistory(part, type, change, note) {
     markChanged();
+    touch(part);
     state.history.unshift({
       id: uid(),
       partId: part.id,
@@ -488,6 +519,9 @@
   // ---------- rendering ----------
   function renderAll() {
     save();
+    renderAllExceptSave();
+  }
+  function renderAllExceptSave() {
     renderStats();
     renderInventory();
     renderShortlist();
@@ -497,7 +531,7 @@
     badge.hidden = lowCount === 0;
     badge.textContent = lowCount;
     $('#countNote').textContent = state.parts.length + ' part' + (state.parts.length === 1 ? '' : 's') + ' tracked';
-    $('#dirtyDot').hidden = !isDirty();
+    $('#dirtyDot').hidden = cloud.isOn() || !isDirty();
     updateSyncStatus();
   }
 
@@ -531,13 +565,25 @@
     }
   }
 
+  function altList(p) { return Array.isArray(p.alts) ? p.alts : []; }
+  // Which alternate (if any) matches the query — used to show the cross-reference in results.
+  function matchedAlt(p, q) {
+    if (!q) return null;
+    var hit = null;
+    altList(p).forEach(function (a) { if (!hit && a.toLowerCase().indexOf(q) !== -1) hit = a; });
+    return hit;
+  }
+  function partMatches(p, q) {
+    return p.pn.toLowerCase().indexOf(q) !== -1 ||
+      p.desc.toLowerCase().indexOf(q) !== -1 ||
+      !!matchedAlt(p, q);
+  }
+
   function filteredParts() {
     var q = $('#search').value.trim().toLowerCase();
     var parts = state.parts.slice().sort(function (a, b) { return a.pn.localeCompare(b.pn, undefined, { numeric: true }); });
     if (!q) return parts;
-    return parts.filter(function (p) {
-      return p.pn.toLowerCase().indexOf(q) !== -1 || p.desc.toLowerCase().indexOf(q) !== -1;
-    });
+    return parts.filter(function (p) { return partMatches(p, q); });
   }
 
   function renderInventory() {
@@ -550,9 +596,12 @@
       $('#invTable').innerHTML = '<div class="empty">No parts match your search.</div>';
       return;
     }
+    var q = $('#search').value.trim().toLowerCase();
     var rows = parts.map(function (p) {
+      var alt = matchedAlt(p, q);
+      var crossRef = alt ? '<div class="hint" style="margin:2px 0 0;">↳ alt: ' + esc(alt) + '</div>' : '';
       return '<tr class="' + (isLow(p) ? 'low' : '') + '" data-id="' + p.id + '">' +
-        '<td class="pn">' + esc(p.pn) + (p.pinned ? ' <span class="tag pinned">PIN</span>' : '') + '</td>' +
+        '<td class="pn">' + esc(p.pn) + (p.pinned ? ' <span class="tag pinned">PIN</span>' : '') + crossRef + '</td>' +
         '<td class="desc">' + esc(p.desc) + '</td>' +
         '<td class="num hide-sm">' + money(p.cost) + '</td>' +
         '<td class="num hide-sm">' + money(p.retail) + '</td>' +
@@ -646,8 +695,15 @@
         '</div><div class="delta">' + delta + '</div></div>';
     }).join('') : '<div class="hint">No history yet for this part.</div>';
 
+    var alts = altList(p);
+    var altsHtml = alts.length
+      ? '<div style="margin-bottom:12px;font-size:13px;"><span style="color:var(--muted);">Also known as: </span>' +
+          alts.map(function (a) { return '<span class="tag" style="background:#eef1f5;color:#4a5360;margin:0 4px 4px 0;display:inline-block;">' + esc(a) + '</span>'; }).join('') +
+        '</div>'
+      : '';
     $('#detailBody').innerHTML =
-      '<div style="margin-bottom:12px;font-size:15px;">' + esc(p.desc) + '</div>' +
+      '<div style="margin-bottom:8px;font-size:15px;">' + esc(p.desc) + '</div>' +
+      altsHtml +
       '<div class="detail-grid">' +
         dg('Qty on Hand', p.qoh + (isLow(p) ? ' <span class="tag low">LOW</span>' : '')) +
         dg('Reorder Point', p.reorder) +
@@ -734,6 +790,7 @@
       var p = getPart(id);
       form.pn.value = p.pn;
       form.desc.value = p.desc;
+      form.alts.value = altList(p).join(', ');
       form.cost.value = p.cost;
       form.retail.value = p.retail;
       form.qoh.value = p.qoh;
@@ -751,6 +808,9 @@
     var retail = parseFloat(form.retail.value) || 0;
     var qoh = Math.max(0, parseInt(form.qoh.value, 10) || 0);
     var reorder = Math.max(0, parseInt(form.reorder.value, 10) || 0);
+    // Split on commas / newlines, trim, drop blanks and any duplicate of the main #.
+    var alts = (form.alts.value || '').split(/[,\n]+/).map(function (s) { return s.trim(); })
+      .filter(function (s, i, arr) { return s && s.toLowerCase() !== pn.toLowerCase() && arr.indexOf(s) === i; });
     if (!pn || !desc) return;
 
     var dup = state.parts.find(function (p) {
@@ -761,14 +821,14 @@
     if (editingId) {
       var p = getPart(editingId);
       var qtyDiff = qoh - p.qoh;
-      p.pn = pn; p.desc = desc; p.cost = cost; p.retail = retail; p.reorder = reorder;
+      p.pn = pn; p.desc = desc; p.cost = cost; p.retail = retail; p.reorder = reorder; p.alts = alts;
       if (qtyDiff !== 0) {
         p.qoh = qoh;
         logHistory(p, 'Adjusted', qtyDiff, 'Changed while editing part');
       }
       logHistory(p, 'Edited', null, 'Part details updated');
     } else {
-      var np = { id: uid(), pn: pn, desc: desc, cost: cost, retail: retail, qoh: qoh, reorder: reorder, pinned: false };
+      var np = { id: uid(), pn: pn, desc: desc, alts: alts, cost: cost, retail: retail, qoh: qoh, reorder: reorder, pinned: false };
       state.parts.push(np);
       logHistory(np, 'Created', qoh, 'Part added with starting qty ' + qoh);
     }
@@ -804,9 +864,9 @@
     renderAll();
   }
   function exportCsv() {
-    var head = 'Part Number,Description,Cost,Retail,QOH,Reorder Point\n';
+    var head = 'Part Number,Description,Alternate Part #s,Cost,Retail,QOH,Reorder Point\n';
     var body = state.parts.map(function (p) {
-      return [p.pn, p.desc, p.cost, p.retail, p.qoh, p.reorder].map(csvCell).join(',');
+      return [p.pn, p.desc, altList(p).join('; '), p.cost, p.retail, p.qoh, p.reorder].map(csvCell).join(',');
     }).join('\n');
     download('truck-inventory-' + today() + '.csv', head + body, 'text/csv');
     function csvCell(v) {
@@ -835,6 +895,264 @@
       }
     };
     reader.readAsText(file);
+  }
+
+  // ---------- merge (safe two-device reconcile) ----------
+  // Pure function: combines two states without losing data.
+  //  - parts: keyed by id, the version with the newer updatedAt wins
+  //  - deletes: a tombstone newer than the part's last edit removes it everywhere
+  //  - history: union by id (append-only, never clobbered)
+  // Commutative + idempotent, so applying it repeatedly / in any order is safe.
+  function mergeStates(a, b) {
+    a = a || {}; b = b || {};
+    var tombs = {};
+    [a, b].forEach(function (s) {
+      var d = s.deletedParts || {};
+      Object.keys(d).forEach(function (id) {
+        if (!tombs[id] || d[id] > tombs[id]) tombs[id] = d[id];
+      });
+    });
+    var parts = {};
+    [a, b].forEach(function (s) {
+      (s.parts || []).forEach(function (p) {
+        var ex = parts[p.id];
+        if (!ex || (p.updatedAt || 0) > (ex.updatedAt || 0)) parts[p.id] = p;
+      });
+    });
+    var partList = Object.keys(parts).filter(function (id) {
+      var t = tombs[id];
+      return !(t && t >= (parts[id].updatedAt || 0)); // drop if delete is newer than the part
+    }).map(function (id) { return parts[id]; });
+
+    var hist = {};
+    [a, b].forEach(function (s) {
+      (s.history || []).forEach(function (h) { if (h && h.id) hist[h.id] = h; });
+    });
+    var histList = Object.keys(hist).map(function (k) { return hist[k]; })
+      .sort(function (x, y) { return (y.ts || 0) - (x.ts || 0); });
+
+    return {
+      parts: partList,
+      history: histList,
+      deletedParts: tombs,
+      lastChange: Math.max(a.lastChange || 0, b.lastChange || 0),
+      lastSave: Math.max(a.lastSave || 0, b.lastSave || 0)
+    };
+  }
+  // Signature of the syncable content (ignores rev/timestamps housekeeping) to avoid redundant writes.
+  function syncSig(s) {
+    var parts = (s.parts || []).slice().sort(function (a, b) { return a.id < b.id ? -1 : 1; })
+      .map(function (p) { return [p.id, p.pn, p.desc, p.cost, p.retail, p.qoh, p.reorder, p.pinned ? 1 : 0, p.updatedAt || 0]; });
+    var hist = (s.history || []).map(function (h) { return h.id; }).sort();
+    var tombs = Object.keys(s.deletedParts || {}).sort().map(function (k) { return [k, s.deletedParts[k]]; });
+    return JSON.stringify([parts, hist, tombs]);
+  }
+
+  // ---------- automatic cloud sync (Firebase Firestore) ----------
+  function parseFirebaseConfig(text) {
+    var cfg = {};
+    ['apiKey', 'authDomain', 'projectId', 'storageBucket', 'messagingSenderId', 'appId', 'databaseURL']
+      .forEach(function (k) {
+        var m = text.match(new RegExp(k + '\\s*[:=]\\s*["\\\']([^"\\\']+)["\\\']'));
+        if (m) cfg[k] = m[1];
+      });
+    return (cfg.apiKey && cfg.projectId) ? cfg : null;
+  }
+
+  // Built-in cloud config for this truck's Firebase project, so every device
+  // auto-syncs with no setup. Safe to ship in the app — access is controlled by
+  // the database's security rules, not by hiding these values.
+  var DEFAULT_CLOUD_CFG = {
+    apiKey: "AIzaSyAt-O4XhvtY0W0KOs35nhDU4WnSYUfiG8Q",
+    authDomain: "truck-parts-inventory-c8e6d.firebaseapp.com",
+    projectId: "truck-parts-inventory-c8e6d",
+    storageBucket: "truck-parts-inventory-c8e6d.firebasestorage.app",
+    messagingSenderId: "320192055787",
+    appId: "1:320192055787:web:377168c31ed9ba4545b1ae"
+  };
+
+  var cloud = {
+    CFG_KEY: 'truckCloudCfg',
+    OFF_KEY: 'truckCloudOff',
+    ref: null,
+    unsub: null,
+    timer: null,
+    watchdog: null,
+    confirmed: false,
+    lastRemoteSig: null,
+    status: 'off',     // off | connecting | on | error
+    detail: '',
+
+    config: function () {
+      try { return JSON.parse(localStorage.getItem(this.CFG_KEY) || 'null'); } catch (e) { return null; }
+    },
+    // What we actually connect with: a user-pasted config wins; otherwise the
+    // built-in one — unless the user has switched sync off on this device.
+    activeConfig: function () {
+      if (localStorage.getItem(this.OFF_KEY) === '1') return null;
+      return this.config() || DEFAULT_CLOUD_CFG;
+    },
+    isOn: function () { return this.status === 'on' || this.status === 'connecting'; },
+
+    loadSdk: function () {
+      if (window.firebase && window.firebase.firestore) return Promise.resolve();
+      var base = 'https://www.gstatic.com/firebasejs/10.12.5/';
+      function add(src) {
+        return new Promise(function (res, rej) {
+          var s = document.createElement('script');
+          s.src = src; s.onload = res; s.onerror = function () { rej(new Error('network')); };
+          document.head.appendChild(s);
+        });
+      }
+      return add(base + 'firebase-app-compat.js').then(function () { return add(base + 'firebase-firestore-compat.js'); });
+    },
+
+    connect: function (cfg, isSetup) {
+      var self = this;
+      self.confirmed = false;
+      self.setStatus('connecting', 'Connecting…');
+      return self.loadSdk().then(function () {
+        if (!firebase.apps.length) firebase.initializeApp(cfg);
+        var db = firebase.firestore();
+        try { db.enablePersistence({ synchronizeTabs: true }).catch(function () {}); } catch (e) {}
+        self.ref = db.collection('truckInventory').doc('main');
+        if (isSetup) { localStorage.setItem(self.CFG_KEY, JSON.stringify(cfg)); localStorage.removeItem(self.OFF_KEY); }
+        // Watchdog: if the server never confirms (bad config / no project), warn after 15s.
+        self.armWatchdog();
+        if (self.unsub) self.unsub();
+        self.unsub = self.ref.onSnapshot({ includeMetadataChanges: true }, function (snap) {
+          // Merge whatever we have (cache or server), without re-triggering a push.
+          if (snap.exists) {
+            var remote = snap.data();
+            self.lastRemoteSig = syncSig(remote);
+            state = mergeStates(state, remote);
+            localStorage.setItem(STORE_KEY, JSON.stringify(state));
+            renderAllExceptSave();
+          } else {
+            self.lastRemoteSig = null;
+          }
+          var serverConfirmed = !snap.metadata.fromCache;
+          if (serverConfirmed) {
+            self.confirmed = true;
+            self.clearWatchdog();
+            if (!snap.exists || syncSig(state) !== self.lastRemoteSig) self.push(true); // create doc / share extra data
+            self.setStatus('on', 'synced');
+          } else if (navigator.onLine === false) {
+            self.setStatus('on', 'offline');          // genuinely no signal — fine, will catch up
+          } else if (!self.confirmed && self.status === 'connecting') {
+            self.setStatus('connecting', '');          // online, still waiting (don't clobber an error)
+          }
+        }, function (err) {
+          self.clearWatchdog();
+          self.setStatus('error', err && err.message ? err.message : 'Connection error');
+        });
+      }).catch(function (err) {
+        self.clearWatchdog();
+        self.setStatus(navigator.onLine ? 'error' : 'on',
+          navigator.onLine ? ('Could not load sync: ' + (err.message || err)) : 'offline');
+      });
+    },
+    armWatchdog: function () {
+      var self = this;
+      this.clearWatchdog();
+      this.watchdog = setTimeout(function () {
+        self.watchdog = null;
+        if (!self.confirmed && navigator.onLine) {
+          self.setStatus('error', 'Couldn’t reach your cloud. Double-check the configuration you pasted, then try again.');
+        }
+      }, 15000);
+    },
+    clearWatchdog: function () { if (this.watchdog) { clearTimeout(this.watchdog); this.watchdog = null; } },
+
+    schedulePush: function () {
+      if (!this.ref) return;
+      var self = this;
+      clearTimeout(this.timer);
+      this.timer = setTimeout(function () { self.push(); }, 900);
+    },
+    push: function (force) {
+      if (!this.ref) return;
+      if (!force && syncSig(state) === this.lastRemoteSig) return; // nothing new to send
+      var self = this;
+      this.ref.set({
+        parts: state.parts,
+        history: state.history,
+        deletedParts: state.deletedParts || {},
+        rev: Date.now()
+      }).catch(function (err) {
+        if (navigator.onLine) self.setStatus('error', err && err.message ? err.message : 'Write failed');
+      });
+    },
+
+    disconnect: function () {
+      if (this.unsub) { this.unsub(); this.unsub = null; }
+      this.clearWatchdog();
+      this.ref = null;
+      localStorage.setItem(this.OFF_KEY, '1'); // stay off on this device until turned back on
+      localStorage.removeItem(this.CFG_KEY);
+      this.setStatus('off', '');
+    },
+    enable: function () {
+      localStorage.removeItem(this.OFF_KEY);
+      var cfg = this.activeConfig();
+      if (cfg) this.connect(cfg, false);
+    },
+
+    setStatus: function (status, detail) {
+      this.status = status; this.detail = detail || '';
+      renderCloudUI();
+    },
+    init: function () {
+      var cfg = this.activeConfig();
+      if (cfg) this.connect(cfg, false);
+      else renderCloudUI();
+    }
+  };
+
+  function renderCloudUI() {
+    var pill = $('#cloudPill'), status = $('#cloudStatus'), btns = $('#cloudButtons');
+    if (!pill) return;
+    var map = {
+      off:        { txt: 'Off',         bg: '#e6e8eb', fg: '#4a5360' },
+      connecting: { txt: 'Connecting…', bg: '#fdf3e0', fg: '#8a5a13' },
+      on:         { txt: 'On',          bg: '#d9efe2', fg: '#1e6b43' },
+      error:      { txt: 'Problem',     bg: '#f6dede', fg: '#993939' }
+    };
+    var m = map[cloud.status] || map.off;
+    pill.textContent = m.txt; pill.style.background = m.bg; pill.style.color = m.fg;
+
+    if (cloud.status === 'on') {
+      if (cloud.detail === 'offline') {
+        pill.textContent = 'Offline'; pill.style.background = '#fdf3e0'; pill.style.color = '#8a5a13';
+        status.innerHTML = '<b style="color:#8a5a13;">No signal right now.</b> Keep working — your changes save here and will sync the moment you’re back online.';
+      } else {
+        status.innerHTML = '<b style="color:var(--good);">&#10003; Changes sync automatically</b> across every device using the same setup. Works offline too — it catches up when you get signal.';
+      }
+      btns.innerHTML = '<button class="btn small" id="btnCloudOff">Turn off auto-sync</button>';
+    } else if (cloud.status === 'connecting') {
+      status.textContent = 'Connecting to your cloud…';
+      btns.innerHTML = '';
+    } else if (cloud.status === 'error') {
+      status.innerHTML = '<span style="color:var(--danger);">' + esc(cloud.detail) + '</span>';
+      btns.innerHTML = '<button class="btn small" id="btnCloudRetry">Try again</button> <button class="btn small" id="btnCloudOff">Remove</button>';
+    } else {
+      status.textContent = 'Automatic sync is turned off on this device. Turn it on to keep this iPhone/iPad in step with your others automatically.';
+      btns.innerHTML = '<button class="btn primary small" id="btnCloudOn">Turn on auto-sync</button>';
+    }
+    wireCloudButtons();
+  }
+
+  function wireCloudButtons() {
+    var on = $('#btnCloudOn');
+    if (on) on.onclick = function () { cloud.enable(); };
+    var setup = $('#btnCloudSetup');
+    if (setup) setup.onclick = function () { $('#cloudSetup').hidden = false; $('#cloudCfgInput').focus(); };
+    var off = $('#btnCloudOff');
+    if (off) off.onclick = function () {
+      if (confirm('Turn off automatic sync on this device?\n\nYour parts stay here. To sync again you’d paste the setup back in.')) cloud.disconnect();
+    };
+    var retry = $('#btnCloudRetry');
+    if (retry) retry.onclick = function () { var c = cloud.config(); if (c) cloud.connect(c, false); };
   }
 
   // ---------- shortlist copy / print ----------
@@ -878,6 +1196,16 @@
   $('#btnBackup').addEventListener('click', function () { $('#dlgBackup').showModal(); });
   $('#btnExportJson').addEventListener('click', saveToCloud);
   $('#btnExportCsv').addEventListener('click', exportCsv);
+  $('#btnCloudCancel').addEventListener('click', function () {
+    $('#cloudSetup').hidden = true; $('#cloudErr').textContent = '';
+  });
+  $('#btnCloudConnect').addEventListener('click', function () {
+    var cfg = parseFirebaseConfig($('#cloudCfgInput').value);
+    if (!cfg) { $('#cloudErr').textContent = 'Could not find the apiKey and projectId in what you pasted. Paste the whole firebaseConfig block.'; return; }
+    $('#cloudErr').textContent = '';
+    $('#cloudSetup').hidden = true;
+    cloud.connect(cfg, true);
+  });
   $('#btnImportJson').addEventListener('click', function () { $('#fileImport').click(); });
   $('#fileImport').addEventListener('change', function (e) {
     if (e.target.files[0]) importJson(e.target.files[0]);
@@ -925,6 +1253,7 @@
     var p = getPart(detailId);
     if (!p) return;
     p.pinned = !p.pinned;
+    touch(p);
     markChanged();
     renderAll();
     openDetail(p.id);
@@ -934,6 +1263,7 @@
     if (!p) return;
     if (!confirm('Delete ' + p.pn + ' (' + p.desc + ')?\n\nIts history stays in the History tab.')) return;
     state.parts = state.parts.filter(function (x) { return x.id !== detailId; });
+    state.deletedParts[detailId] = Date.now(); // tombstone so the delete syncs to other devices
     markChanged();
     $('#dlgDetail').close();
     detailId = null;
@@ -955,6 +1285,7 @@
   });
 
   renderAll();
+  cloud.init();
 
   // Offline support once the app is hosted (no effect when opened as a plain file)
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {

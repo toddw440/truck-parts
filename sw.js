@@ -1,5 +1,5 @@
 /* Offline cache: network-first so updates land, cached copy when out of signal. */
-var CACHE = 'truck-parts-v1';
+var CACHE = 'truck-parts-v2';
 
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) {
