@@ -352,6 +352,9 @@
           <input name="reorder" type="number" step="1" min="0" required inputmode="numeric">
         </label>
       </div>
+      <label class="field">Notes <span style="font-weight:400;color:var(--muted);">(optional)</span>
+        <textarea name="notes" rows="3" autocomplete="off" placeholder="e.g. Fits 2015–2020 models. Supplier: Acme #12. Located in bin 4."></textarea>
+      </label>
     </div>
     <div class="dlg-foot">
       <button type="button" class="btn" data-close>Cancel</button>
@@ -576,6 +579,7 @@
   function partMatches(p, q) {
     return p.pn.toLowerCase().indexOf(q) !== -1 ||
       p.desc.toLowerCase().indexOf(q) !== -1 ||
+      (p.notes || '').toLowerCase().indexOf(q) !== -1 ||
       !!matchedAlt(p, q);
   }
 
@@ -701,6 +705,9 @@
           alts.map(function (a) { return '<span class="tag" style="background:#eef1f5;color:#4a5360;margin:0 4px 4px 0;display:inline-block;">' + esc(a) + '</span>'; }).join('') +
         '</div>'
       : '';
+    var notesHtml = (p.notes && p.notes.trim())
+      ? '<h3 class="sect">Notes</h3><div style="font-size:14px;white-space:pre-wrap;line-height:1.5;margin-bottom:6px;">' + esc(p.notes) + '</div>'
+      : '';
     $('#detailBody').innerHTML =
       '<div style="margin-bottom:8px;font-size:15px;">' + esc(p.desc) + '</div>' +
       altsHtml +
@@ -717,6 +724,7 @@
         '<button class="btn small" data-stock="use">&minus; Use / Sell</button>' +
         '<button class="btn small" data-stock="adjust">Adjust Count</button>' +
       '</div>' +
+      notesHtml +
       '<h3 class="sect">History</h3>' +
       '<div class="hist-list">' + histHtml + '</div>';
 
@@ -791,6 +799,7 @@
       form.pn.value = p.pn;
       form.desc.value = p.desc;
       form.alts.value = altList(p).join(', ');
+      form.notes.value = p.notes || '';
       form.cost.value = p.cost;
       form.retail.value = p.retail;
       form.qoh.value = p.qoh;
@@ -811,6 +820,7 @@
     // Split on commas / newlines, trim, drop blanks and any duplicate of the main #.
     var alts = (form.alts.value || '').split(/[,\n]+/).map(function (s) { return s.trim(); })
       .filter(function (s, i, arr) { return s && s.toLowerCase() !== pn.toLowerCase() && arr.indexOf(s) === i; });
+    var notes = (form.notes.value || '').trim();
     if (!pn || !desc) return;
 
     var dup = state.parts.find(function (p) {
@@ -821,14 +831,14 @@
     if (editingId) {
       var p = getPart(editingId);
       var qtyDiff = qoh - p.qoh;
-      p.pn = pn; p.desc = desc; p.cost = cost; p.retail = retail; p.reorder = reorder; p.alts = alts;
+      p.pn = pn; p.desc = desc; p.cost = cost; p.retail = retail; p.reorder = reorder; p.alts = alts; p.notes = notes;
       if (qtyDiff !== 0) {
         p.qoh = qoh;
         logHistory(p, 'Adjusted', qtyDiff, 'Changed while editing part');
       }
       logHistory(p, 'Edited', null, 'Part details updated');
     } else {
-      var np = { id: uid(), pn: pn, desc: desc, alts: alts, cost: cost, retail: retail, qoh: qoh, reorder: reorder, pinned: false };
+      var np = { id: uid(), pn: pn, desc: desc, alts: alts, notes: notes, cost: cost, retail: retail, qoh: qoh, reorder: reorder, pinned: false };
       state.parts.push(np);
       logHistory(np, 'Created', qoh, 'Part added with starting qty ' + qoh);
     }
@@ -864,9 +874,9 @@
     renderAll();
   }
   function exportCsv() {
-    var head = 'Part Number,Description,Alternate Part #s,Cost,Retail,QOH,Reorder Point\n';
+    var head = 'Part Number,Description,Alternate Part #s,Cost,Retail,QOH,Reorder Point,Notes\n';
     var body = state.parts.map(function (p) {
-      return [p.pn, p.desc, altList(p).join('; '), p.cost, p.retail, p.qoh, p.reorder].map(csvCell).join(',');
+      return [p.pn, p.desc, altList(p).join('; '), p.cost, p.retail, p.qoh, p.reorder, p.notes || ''].map(csvCell).join(',');
     }).join('\n');
     download('truck-inventory-' + today() + '.csv', head + body, 'text/csv');
     function csvCell(v) {
